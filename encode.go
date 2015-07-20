@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/base64"
+	"fmt"
 	"math"
 	"reflect"
 	"runtime"
@@ -164,7 +165,6 @@ func MarshalIndentWithTag(v interface{}, prefix, indent string, tag string) ([]b
 	return buf.Bytes(), nil
 }
 
-
 // HTMLEscape appends to dst the JSON-encoded src with <, >, &, U+2028 and U+2029
 // characters inside string literals changed to \u003c, \u003e, \u0026, \u2028, \u2029
 // so that the JSON will be safe to embed inside HTML <script> tags.
@@ -313,9 +313,14 @@ func (e *encodeState) reflectValue(v reflect.Value, tag string) {
 
 type encoderFunc func(e *encodeState, v reflect.Value, quoted bool, tag string)
 
+type encoderCacheKey struct {
+	tag string
+	typ reflect.Type
+}
+
 var encoderCache struct {
 	sync.RWMutex
-	m map[reflect.Type]encoderFunc
+	m map[encoderCacheKey]encoderFunc
 }
 
 func valueEncoder(v reflect.Value, tag string) encoderFunc {
@@ -327,9 +332,10 @@ func valueEncoder(v reflect.Value, tag string) encoderFunc {
 
 func typeEncoder(t reflect.Type, tag string) encoderFunc {
 	encoderCache.RLock()
-	f := encoderCache.m[t]
+	f := encoderCache.m[encoderCacheKey{tag, t}]
 	encoderCache.RUnlock()
 	if f != nil {
+		fmt.Printf("found in cache %s\n", tag)
 		return f
 	}
 
@@ -339,11 +345,11 @@ func typeEncoder(t reflect.Type, tag string) encoderFunc {
 	// func is only used for recursive types.
 	encoderCache.Lock()
 	if encoderCache.m == nil {
-		encoderCache.m = make(map[reflect.Type]encoderFunc)
+		encoderCache.m = make(map[encoderCacheKey]encoderFunc)
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
-	encoderCache.m[t] = func(e *encodeState, v reflect.Value, quoted bool, tag string) {
+	encoderCache.m[encoderCacheKey{tag, t}] = func(e *encodeState, v reflect.Value, quoted bool, tag string) {
 		wg.Wait()
 		f(e, v, quoted, tag)
 	}
@@ -354,7 +360,7 @@ func typeEncoder(t reflect.Type, tag string) encoderFunc {
 	f = newTypeEncoder(t, true, tag)
 	wg.Done()
 	encoderCache.Lock()
-	encoderCache.m[t] = f
+	encoderCache.m[encoderCacheKey{tag, t}] = f
 	encoderCache.Unlock()
 	return f
 }
@@ -633,7 +639,7 @@ func (me *mapEncoder) encode(e *encodeState, v reflect.Value, _ bool, tag string
 	e.WriteByte('}')
 }
 
-func newMapEncoder(t reflect.Type,tag string) encoderFunc {
+func newMapEncoder(t reflect.Type, tag string) encoderFunc {
 	if t.Key().Kind() != reflect.String {
 		return unsupportedTypeEncoder
 	}
@@ -1164,15 +1170,20 @@ func dominantField(fields []field) (field, bool) {
 	return fields[0], true
 }
 
+type fieldCacheItem struct {
+	tag string
+	typ reflect.Type
+}
+
 var fieldCache struct {
 	sync.RWMutex
-	m map[reflect.Type][]field
+	m map[fieldCacheItem][]field
 }
 
 // cachedTypeFields is like typeFields but uses a cache to avoid repeated work.
 func cachedTypeFields(t reflect.Type, encodingTag string) []field {
 	fieldCache.RLock()
-	f := fieldCache.m[t]
+	f := fieldCache.m[fieldCacheItem{encodingTag, t}]
 	fieldCache.RUnlock()
 	if f != nil {
 		return f
@@ -1187,9 +1198,9 @@ func cachedTypeFields(t reflect.Type, encodingTag string) []field {
 
 	fieldCache.Lock()
 	if fieldCache.m == nil {
-		fieldCache.m = map[reflect.Type][]field{}
+		fieldCache.m = map[fieldCacheItem][]field{}
 	}
-	fieldCache.m[t] = f
+	fieldCache.m[fieldCacheItem{encodingTag, t}] = f
 	fieldCache.Unlock()
 	return f
 }
