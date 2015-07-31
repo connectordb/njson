@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/base64"
-	"fmt"
 	"math"
 	"reflect"
 	"runtime"
@@ -335,7 +334,6 @@ func typeEncoder(t reflect.Type, tag string) encoderFunc {
 	f := encoderCache.m[encoderCacheKey{tag, t}]
 	encoderCache.RUnlock()
 	if f != nil {
-		fmt.Printf("found in cache %s\n", tag)
 		return f
 	}
 
