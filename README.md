@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/connectordb/njson.svg)](https://travis-ci.org/connectordb/njson)[![Coverage Status](https://coveralls.io/repos/connectordb/njson/badge.svg?branch=master&service=github)](https://coveralls.io/github/connectordb/njson?branch=master)[![GoDoc](https://godoc.org/github.com/connectordb/njson?status.svg)](http://godoc.org/github.com/connectordb/njson)
+
 # njson
 A JSON parser derived from go's that supports user-defined tags.
 
